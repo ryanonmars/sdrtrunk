@@ -259,7 +259,7 @@ def configure(org.beryx.runtime.RuntimeZipTask rt, List<String> jvmArgs) {
     rt.extension.additive.set(true)
 
     //Recommended options for reducing/shrinking runtime target image size
-    rt.extension.addOptions('--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages')
+    rt.extension.addOptions('--compress', '2', '--no-header-files', '--no-man-pages')
 
     //Runtime images have auto appended version in image zip name.  Override to include version in single target image.
     rt.extension.imageZip.set(file("$buildDir/image/sdr-trunk.zip"))
