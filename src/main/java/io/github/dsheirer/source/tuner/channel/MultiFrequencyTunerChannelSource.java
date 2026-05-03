@@ -26,6 +26,7 @@ import io.github.dsheirer.source.Source;
 import io.github.dsheirer.source.SourceEvent;
 import io.github.dsheirer.source.SourceException;
 import io.github.dsheirer.source.heartbeat.Heartbeat;
+import io.github.dsheirer.source.tuner.channel.rotation.FrequencyHoldChangeRequest;
 import io.github.dsheirer.source.tuner.channel.rotation.FrequencyLockChangeRequest;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import io.github.dsheirer.util.ThreadPool;
@@ -99,6 +100,36 @@ public class MultiFrequencyTunerChannelSource extends TunerChannelSource
             }
 
             //Request the next tuner channel source
+            getNextSource(getTunerChannel(frequency));
+        }
+    }
+
+    /**
+     * Changes this source to use the requested frequency from the configured frequency list.
+     * @param frequency to use
+     */
+    private void select(long frequency)
+    {
+        if(!mFrequencies.contains(frequency) || frequency == getFrequency())
+        {
+            return;
+        }
+
+        if(mChangingChannels.compareAndSet(false, true))
+        {
+            mFrequencyListPointer = mFrequencies.indexOf(frequency);
+
+            if(mTunerChannelSource != null)
+            {
+                //Shutdown the existing tuner channel source
+                mTunerChannelSource.stop();
+                mTunerChannelSource.setListener(null);
+                mTunerChannelSource.removeSourceEventListener();
+                mTunerChannelSource.removeHeartbeatListener(mHeartbeatListener);
+                mTunerChannelSource.dispose();
+                mTunerChannelSource = null;
+            }
+
             getNextSource(getTunerChannel(frequency));
         }
     }
@@ -179,6 +210,19 @@ public class MultiFrequencyTunerChannelSource extends TunerChannelSource
         else if(request.isUnlockRequest() && mLockedFrequencies.contains(request.getFrequency()))
         {
             mLockedFrequencies.remove(request.getFrequency());
+        }
+    }
+
+    /**
+     * Processes requests to immediately hold on a selected frequency.
+     * @param request frequency hold request
+     */
+    @Subscribe
+    public void process(FrequencyHoldChangeRequest request)
+    {
+        if(request.isHoldRequest())
+        {
+            select(request.getFrequency());
         }
     }
 

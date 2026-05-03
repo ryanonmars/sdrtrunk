@@ -64,8 +64,21 @@ public class ChannelRotationMonitor extends Module implements ISourceEventProvid
      */
     public ChannelRotationMonitor(Collection<State> activeStates, long rotationDelay, UserPreferences userPreferences)
     {
+        this(activeStates, rotationDelay, true, userPreferences);
+    }
+
+    /**
+     * Constructs a channel rotation monitor that uses the specified rotation delay.
+     * @param activeStates to monitor
+     * @param rotationDelay specifies how long to remain on each frequency before rotating (in milliseconds).
+     * @param enabled true to enable rotation monitoring at startup
+     */
+    public ChannelRotationMonitor(Collection<State> activeStates, long rotationDelay, boolean enabled,
+                                  UserPreferences userPreferences)
+    {
         mActiveStates = activeStates;
         mRotationDelay = rotationDelay;
+        mEnabled = enabled;
         mUserPreferences = userPreferences;
 
         if(mRotationDelay < CHANNEL_ROTATION_DELAY_MINIMUM)
@@ -128,6 +141,26 @@ public class ChannelRotationMonitor extends Module implements ISourceEventProvid
     }
 
     /**
+     * Processes a request to hold or resume channel rotation.
+     * @param request frequency hold request
+     */
+    @Subscribe
+    public void frequencyHold(FrequencyHoldChangeRequest request)
+    {
+        if(request.isHoldRequest())
+        {
+            mEnabled = false;
+            stop();
+        }
+        else
+        {
+            mEnabled = true;
+            mLastActiveTimestamp = System.currentTimeMillis();
+            start();
+        }
+    }
+
+    /**
      * Processes a request to add an active state to the list of monitored active states.
      * @param request to add
      */
@@ -175,7 +208,7 @@ public class ChannelRotationMonitor extends Module implements ISourceEventProvid
     @Override
     public void start()
     {
-        if(mScheduledFuture == null)
+        if(mEnabled && mScheduledFuture == null)
         {
             Runnable runnable = () -> {
                 try
@@ -203,4 +236,3 @@ public class ChannelRotationMonitor extends Module implements ISourceEventProvid
         }
     }
 }
-

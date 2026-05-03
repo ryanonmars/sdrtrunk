@@ -702,8 +702,10 @@ public class Channel extends Configuration implements Listener<SourceEvent>
                     {
                         for(long frequency: multiConfig.getFrequencies())
                         {
-                            mTunerChannels.add(new TunerChannel(frequency,
-                                    mDecodeConfiguration.getChannelSpecification().getBandwidth()));
+                            TunerChannel tunerChannel = new TunerChannel(frequency,
+                                    mDecodeConfiguration.getChannelSpecification().getBandwidth());
+                            tunerChannel.setLabel(multiConfig.getFrequencyLabel(frequency));
+                            mTunerChannels.add(tunerChannel);
                         }
                     }
                     break;

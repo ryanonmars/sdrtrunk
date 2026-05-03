@@ -184,8 +184,69 @@ public class OverlayPanel extends JPanel implements Listener<ChannelEvent>, ISou
     public void setCursorLocation(Point point)
     {
         mCursorLocation = point;
+        setToolTipText(getChannelTooltip(point));
 
         repaint();
+    }
+
+    /**
+     * Creates a tooltip for the channel marker under the cursor.
+     */
+    private String getChannelTooltip(Point point)
+    {
+        if(point == null || point.y > getSize().getHeight() - mSpectrumInset)
+        {
+            return null;
+        }
+
+        for(Channel channel : mVisibleChannels)
+        {
+            if(mChannelDisplay == ChannelDisplay.ALL || (mChannelDisplay == ChannelDisplay.ENABLED && channel.isProcessing()))
+            {
+                for(TunerChannel tunerChannel: channel.getTunerChannels())
+                {
+                    if(tunerChannel.overlaps(getMinDisplayFrequency(), getMaxDisplayFrequency()))
+                    {
+                        double xAxis = getAxisFromFrequency(tunerChannel.getFrequency());
+                        double width = (double)(tunerChannel.getBandwidth()) / (double)getDisplayBandwidth() *
+                            getSize().getWidth();
+                        double hitWidth = Math.max(width, 10.0d);
+
+                        if(Math.abs(point.x - xAxis) <= (hitWidth / 2.0d))
+                        {
+                            String label = tunerChannel.getLabel();
+                            StringBuilder sb = new StringBuilder("<html>");
+
+                            if(label != null && !label.isBlank())
+                            {
+                                sb.append(label).append("<br>");
+                            }
+
+                            sb.append(channel.getName()).append("<br>");
+                            sb.append(CURSOR_FORMAT.format(tunerChannel.getFrequency() / 1E6)).append(" MHz");
+
+                            if(channel.hasSystem() || channel.hasSite())
+                            {
+                                sb.append("<br>");
+                                sb.append(channel.hasSystem() ? channel.getSystem() : "");
+
+                                if(channel.hasSystem() && channel.hasSite())
+                                {
+                                    sb.append(" / ");
+                                }
+
+                                sb.append(channel.hasSite() ? channel.getSite() : "");
+                            }
+
+                            sb.append("</html>");
+                            return sb.toString();
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     public void setCursorVisible(boolean visible)
@@ -572,22 +633,32 @@ public class OverlayPanel extends JPanel implements Listener<ChannelEvent>, ISou
                         //Draw the labels starting at yAxis position 0
                         double yAxis = 0;
 
-                        //Draw the system label and adjust the y-axis position
-                        String system = channel.hasSystem() ? channel.getSystem() : " ";
+                        //Draw the optional per-frequency label and adjust the y-axis position
+                        String frequencyLabel = tunerChannel.getLabel();
 
-                        yAxis += drawLabel(graphics, system, this.getFont(), xAxis, yAxis, width);
+                        if(frequencyLabel != null && !frequencyLabel.isBlank())
+                        {
+                            drawChannelTooltipMarker(graphics, xAxis);
+                        }
+                        else
+                        {
+                            //Draw the system label and adjust the y-axis position
+                            String system = channel.hasSystem() ? channel.getSystem() : " ";
 
-                        //Draw the site label and adjust the y-axis position
-                        String site = channel.hasSite() ? channel.getSite() : " ";
+                            yAxis += drawLabel(graphics, system, this.getFont(), xAxis, yAxis, width);
 
-                        yAxis += drawLabel(graphics, site, this.getFont(), xAxis, yAxis, width);
+                            //Draw the site label and adjust the y-axis position
+                            String site = channel.hasSite() ? channel.getSite() : " ";
 
-                        //Draw the channel label and adjust the y-axis position
-                        yAxis += drawLabel(graphics, channel.getName(), this.getFont(), xAxis, yAxis, width);
+                            yAxis += drawLabel(graphics, site, this.getFont(), xAxis, yAxis, width);
 
-                        //Draw the decoder label
-                        drawLabel(graphics, channel.getDecodeConfiguration().getDecoderType().getShortDisplayString(),
+                            //Draw the channel label and adjust the y-axis position
+                            yAxis += drawLabel(graphics, channel.getName(), this.getFont(), xAxis, yAxis, width);
+
+                            //Draw the decoder label
+                            drawLabel(graphics, channel.getDecodeConfiguration().getDecoderType().getShortDisplayString(),
                                 this.getFont(), xAxis, yAxis, width);
+                        }
                         long frequency = tunerChannel.getFrequency();
                         double frequencyAxis = getAxisFromFrequency(frequency);
                         drawChannelCenterLine(graphics, frequencyAxis);
@@ -648,6 +719,16 @@ public class OverlayPanel extends JPanel implements Listener<ChannelEvent>, ISou
         }
 
         return label.getHeight();
+    }
+
+    /**
+     * Draws a small marker at the top of a configured channel to indicate a hover label is available.
+     */
+    private void drawChannelTooltipMarker(Graphics2D graphics, double x)
+    {
+        Rectangle2D.Double marker = new Rectangle2D.Double(x - 4.0d, 1.0d, 8.0d, 5.0d);
+        graphics.fill(marker);
+        graphics.draw(marker);
     }
 
     /**

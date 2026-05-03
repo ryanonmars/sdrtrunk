@@ -35,10 +35,12 @@ import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -62,6 +64,8 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     private ComboBox<String> mPreferredTunerComboBox;
     private VBox mFrequencyBoxContainer;
     private Spinner<Integer> mChannelRotationDelaySpinner;
+    private FrequencyHoldSelectionListener mFrequencyHoldSelectionListener;
+    private boolean mUpdatingHoldSelection;
     private boolean mAllowMultipleFrequencies = false;
     private int mFrequencyRotationDefault = ChannelRotationMonitor.CHANNEL_ROTATION_DELAY_DEFAULT;
     private int mFrequencyRotationMinimum = ChannelRotationMonitor.CHANNEL_ROTATION_DELAY_MINIMUM;
@@ -94,6 +98,14 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     {
         mTunerManager = tunerManager;
         init();
+    }
+
+    /**
+     * Sets a listener to receive frequency hold changes as soon as the user checks or unchecks a hold box.
+     */
+    public void setFrequencyHoldSelectionListener(FrequencyHoldSelectionListener listener)
+    {
+        mFrequencyHoldSelectionListener = listener;
     }
 
     private void init()
@@ -214,8 +226,14 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
             }
 
             sourceConfigMulti.setFrequencies(frequencies);
+            sourceConfigMulti.setFrequencyLabels(getFrequencyLabels());
             sourceConfigMulti.setPreferredTuner(preferredTuner);
             sourceConfigMulti.setFrequencyRotationDelay(getFrequencyRotationDelaySpinner().getValue());
+
+            Long frequencyHold = getHeldFrequency();
+            boolean frequencyHoldEnabled = frequencyHold != null;
+            sourceConfigMulti.setFrequencyHoldEnabled(frequencyHoldEnabled && frequencyHold != null);
+            sourceConfigMulti.setFrequencyHold(frequencyHold);
             setSourceConfiguration(sourceConfigMulti);
         }
     }
@@ -241,17 +259,20 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
             setFrequencies(Collections.emptyList());
             getPreferredTunerComboBox().setDisable(true);
             getPreferredTunerComboBox().getSelectionModel().select(null);
+            updateFrequencyHoldOptions(null);
         }
         else if(sourceConfiguration instanceof SourceConfigTuner)
         {
             SourceConfigTuner sourceConfigTuner = (SourceConfigTuner)sourceConfiguration;
             setFrequency(sourceConfigTuner.getFrequency());
             preferredTuner = sourceConfigTuner.getPreferredTuner();
+            updateFrequencyHoldOptions(null);
         }
         else if(sourceConfiguration instanceof SourceConfigTunerMultipleFrequency)
         {
             SourceConfigTunerMultipleFrequency sourceMulti = (SourceConfigTunerMultipleFrequency)sourceConfiguration;
             setFrequencies(sourceMulti.getFrequencies());
+            setFrequencyLabels(sourceMulti.getFrequencyLabels());
             preferredTuner = sourceMulti.getPreferredTuner();
 
             int rotationDelay = sourceMulti.getFrequencyRotationDelay();
@@ -272,12 +293,14 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
             }
 
             getFrequencyRotationDelaySpinner().getValueFactory().setValue(rotationDelay);
+            setHeldFrequency(sourceMulti.isFrequencyHoldEnabled() ? sourceMulti.getFrequencyHold() : null);
         }
         else
         {
             setFrequencies(Collections.emptyList());
             getPreferredTunerComboBox().setDisable(false);
             getPreferredTunerComboBox().getSelectionModel().select(null);
+            updateFrequencyHoldOptions(null);
         }
 
         updatePreferredTuners();
@@ -320,6 +343,99 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
         }
 
         return mChannelRotationDelaySpinner;
+    }
+
+    /**
+     * Updates available hold frequency choices from the current frequency list.
+     */
+    private void updateFrequencyHoldOptions(Long requestedSelection)
+    {
+        if(!mAllowMultipleFrequencies)
+        {
+            return;
+        }
+
+        setHeldFrequency(requestedSelection == null ? getHeldFrequency() : requestedSelection);
+        updateFrequencyHoldControls();
+    }
+
+    /**
+     * Enables or disables hold controls based on the current frequency list and checkbox state.
+     */
+    private void updateFrequencyHoldControls()
+    {
+        if(mAllowMultipleFrequencies)
+        {
+            boolean hasMultipleFrequencies = getFrequencies().size() > 1;
+
+            for(FrequencyBox frequencyBox: mFrequencyBoxes)
+            {
+                frequencyBox.getHoldCheckBox().setDisable(!hasMultipleFrequencies || frequencyBox.getFrequencyField().get() <= 0);
+            }
+        }
+    }
+
+    /**
+     * Gets the current held frequency.
+     */
+    private Long getHeldFrequency()
+    {
+        for(FrequencyBox frequencyBox: mFrequencyBoxes)
+        {
+            if(frequencyBox.getHoldCheckBox().isSelected())
+            {
+                long frequency = frequencyBox.getFrequencyField().get();
+
+                if(frequency > 0)
+                {
+                    return frequency;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Selects the hold checkbox for the matching frequency and clears all others.
+     */
+    private void setHeldFrequency(Long frequency)
+    {
+        boolean matched = false;
+
+        for(FrequencyBox frequencyBox: mFrequencyBoxes)
+        {
+            boolean selected = frequency != null && frequencyBox.getFrequencyField().get() == frequency && !matched;
+            mUpdatingHoldSelection = true;
+            frequencyBox.setHoldSelected(selected);
+            mUpdatingHoldSelection = false;
+            matched |= selected;
+        }
+    }
+
+    /**
+     * Processes a user hold checkbox selection.
+     */
+    private void selectHoldFrequency(FrequencyBox selectedFrequencyBox, boolean selected)
+    {
+        long frequency = selectedFrequencyBox.getFrequencyField().get();
+
+        for(FrequencyBox frequencyBox: mFrequencyBoxes)
+        {
+            if(frequencyBox != selectedFrequencyBox)
+            {
+                mUpdatingHoldSelection = true;
+                frequencyBox.setHoldSelected(false);
+                mUpdatingHoldSelection = false;
+            }
+        }
+
+        modifiedProperty().set(true);
+
+        if(mFrequencyHoldSelectionListener != null)
+        {
+            mFrequencyHoldSelectionListener.frequencyHoldSelectionChanged(selected && frequency > 0, frequency);
+        }
     }
 
     /**
@@ -401,6 +517,8 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
                 frequencyBox.getFrequencyField().set(frequencies.get(x));
             }
         }
+
+        updateFrequencyHoldOptions(null);
     }
 
     /**
@@ -410,6 +528,7 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     {
         resetFrequencyBoxes();
         getPrimaryFrequencyBox().getFrequencyField().set(frequency);
+        updateFrequencyHoldOptions(null);
     }
 
     /**
@@ -432,6 +551,39 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     }
 
     /**
+     * Updates the frequency label controls with the list of labels.
+     */
+    public void setFrequencyLabels(List<String> labels)
+    {
+        if(labels != null)
+        {
+            for(int x = 0; x < labels.size() && x < mFrequencyBoxes.size(); x++)
+            {
+                mFrequencyBoxes.get(x).getFrequencyLabelField().setText(labels.get(x));
+            }
+        }
+    }
+
+    /**
+     * List of frequency labels contained in this control.
+     */
+    public List<String> getFrequencyLabels()
+    {
+        List<String> labels = new ArrayList<>();
+
+        for(FrequencyBox frequencyBox: mFrequencyBoxes)
+        {
+            if(frequencyBox.getFrequencyField().get() > 0)
+            {
+                String label = frequencyBox.getFrequencyLabelField().getText();
+                labels.add(label != null ? label.trim() : "");
+            }
+        }
+
+        return labels;
+    }
+
+    /**
      * Resets the frequency boxes to a single frequency box with an empty frequency value.
      */
     private void resetFrequencyBoxes()
@@ -441,6 +593,7 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
         getFrequencyBoxContainer().getChildren().add(getPrimaryFrequencyBox());
         mFrequencyBoxes.add(getPrimaryFrequencyBox());
         getPrimaryFrequencyBox().getFrequencyField().set(0);
+        getPrimaryFrequencyBox().getFrequencyLabelField().setText(null);
     }
 
     /**
@@ -452,6 +605,7 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
         frequencyBox.disable(false);
         mFrequencyBoxes.add(frequencyBox);
         getFrequencyBoxContainer().getChildren().add(frequencyBox);
+        updateFrequencyHoldOptions(null);
         return frequencyBox;
     }
 
@@ -462,6 +616,7 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     {
         getFrequencyBoxContainer().getChildren().remove(toRemove);
         mFrequencyBoxes.remove(toRemove);
+        updateFrequencyHoldOptions(null);
         modifiedProperty().set(true);
     }
 
@@ -471,11 +626,26 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
     public enum Buttons {ADD, REMOVE, NONE }
 
     /**
+     * Listener for immediate frequency hold changes.
+     */
+    public interface FrequencyHoldSelectionListener
+    {
+        /**
+         * Indicates that frequency hold selection changed.
+         * @param hold true to hold, false to resume rotation
+         * @param frequency selected frequency
+         */
+        void frequencyHoldSelectionChanged(boolean hold, long frequency);
+    }
+
+    /**
      * Frequency field with optional ADD or REMOVE button
      */
     public class FrequencyBox extends HBox
     {
         private FrequencyField mFrequencyField;
+        private TextField mFrequencyLabelField;
+        private CheckBox mHoldCheckBox;
         private Button mAddButton;
         private Button mRemoveButton;
 
@@ -486,6 +656,12 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
         {
             setSpacing(10);
             getChildren().add(getFrequencyField());
+
+            if(mAllowMultipleFrequencies)
+            {
+                getChildren().add(getFrequencyLabelField());
+                getChildren().add(getHoldCheckBox());
+            }
 
             switch(buttons)
             {
@@ -504,6 +680,8 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
         public void disable(boolean disable)
         {
             getFrequencyField().setDisable(disable);
+            getFrequencyLabelField().setDisable(disable);
+            getHoldCheckBox().setDisable(disable);
             getAddButton().setDisable(disable);
             getRemoveButton().setDisable(disable);
         }
@@ -523,11 +701,59 @@ public class FrequencyEditor extends SourceConfigurationEditor<SourceConfigurati
                     public void changed(ObservableValue<? extends String> observable, String oldValue, String newValue)
                     {
                         modifiedProperty().set(true);
+                        updateFrequencyHoldOptions(null);
                     }
                 });
             }
 
             return mFrequencyField;
+        }
+
+        /**
+         * Frequency label control for this editor.
+         */
+        public TextField getFrequencyLabelField()
+        {
+            if(mFrequencyLabelField == null)
+            {
+                mFrequencyLabelField = new TextField();
+                mFrequencyLabelField.setPromptText("Label");
+                mFrequencyLabelField.setPrefWidth(90);
+                mFrequencyLabelField.setDisable(true);
+                mFrequencyLabelField.textProperty().addListener((observable, oldValue, newValue) ->
+                    modifiedProperty().set(true));
+            }
+
+            return mFrequencyLabelField;
+        }
+
+        /**
+         * Hold checkbox control for this frequency.
+         */
+        private CheckBox getHoldCheckBox()
+        {
+            if(mHoldCheckBox == null)
+            {
+                mHoldCheckBox = new CheckBox("Hold");
+                mHoldCheckBox.setDisable(true);
+                mHoldCheckBox.setTooltip(new Tooltip("Hold on this frequency instead of rotating"));
+                mHoldCheckBox.selectedProperty().addListener((observable, oldValue, selected) -> {
+                    if(!mUpdatingHoldSelection && (selected || oldValue))
+                    {
+                        selectHoldFrequency(FrequencyBox.this, selected);
+                    }
+                });
+            }
+
+            return mHoldCheckBox;
+        }
+
+        /**
+         * Sets the hold selected state without triggering the selection listener.
+         */
+        private void setHoldSelected(boolean selected)
+        {
+            getHoldCheckBox().setSelected(selected);
         }
 
         /**

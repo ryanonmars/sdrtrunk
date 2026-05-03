@@ -255,7 +255,8 @@ public class DecoderFactory
         {
             List<State> activeStates = new ArrayList<>();
             activeStates.add(State.CONTROL);
-            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(), userPreferences));
+            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(),
+                !sctmf.isFrequencyHoldEnabled(), userPreferences));
         }
     }
 
@@ -310,7 +311,8 @@ public class DecoderFactory
         {
             List<State> activeStates = new ArrayList<>();
             activeStates.add(State.CONTROL);
-            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(), userPreferences));
+            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(),
+                !sctmf.isFrequencyHoldEnabled(), userPreferences));
         }
     }
 
@@ -380,7 +382,8 @@ public class DecoderFactory
         {
             List<State> activeStates = new ArrayList<>();
             activeStates.add(State.CONTROL);
-            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(), userPreferences));
+            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(),
+                !sctmf.isFrequencyHoldEnabled(), userPreferences));
         }
     }
 
@@ -563,7 +566,8 @@ public class DecoderFactory
         {
             List<State> activeStates = new ArrayList<>();
             activeStates.add(State.CONTROL);
-            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(), userPreferences));
+            modules.add(new ChannelRotationMonitor(activeStates, sctmf.getFrequencyRotationDelay(),
+                !sctmf.isFrequencyHoldEnabled(), userPreferences));
         }
     }
 

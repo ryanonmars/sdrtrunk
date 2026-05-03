@@ -80,6 +80,10 @@ public class SourceConfigFactory
                     SourceConfigTunerMultipleFrequency copyMulti = new SourceConfigTunerMultipleFrequency();
                     copyMulti.setPreferredTuner(originalMulti.getPreferredTuner());
                     copyMulti.setFrequencies(originalMulti.getFrequencies());
+                    copyMulti.setFrequencyLabels(originalMulti.getFrequencyLabels());
+                    copyMulti.setFrequencyRotationDelay(originalMulti.getFrequencyRotationDelay());
+                    copyMulti.setFrequencyHoldEnabled(originalMulti.isFrequencyHoldEnabled());
+                    copyMulti.setFrequencyHold(originalMulti.getFrequencyHold());
                     return copyMulti;
                 case NONE:
                 default:

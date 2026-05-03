@@ -22,6 +22,7 @@ public class TunerChannel implements Comparable<TunerChannel>
 {
     private long mFrequency;
     private int mBandwidth;
+    private String mLabel;
 
     public TunerChannel(long frequency, int bandwidth)
     {
@@ -47,6 +48,22 @@ public class TunerChannel implements Comparable<TunerChannel>
     public void setBandwidth(int bandwidth)
     {
         mBandwidth = bandwidth;
+    }
+
+    /**
+     * Optional display label for this tuner channel.
+     */
+    public String getLabel()
+    {
+        return mLabel;
+    }
+
+    /**
+     * Sets the optional display label for this tuner channel.
+     */
+    public void setLabel(String label)
+    {
+        mLabel = label;
     }
 
     public long getMinFrequency()

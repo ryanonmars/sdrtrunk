@@ -37,8 +37,11 @@ import java.util.List;
 public class SourceConfigTunerMultipleFrequency extends SourceConfiguration
 {
     private List<Long> mFrequencies = new ArrayList<>();
+    private List<String> mFrequencyLabels = new ArrayList<>();
     private String mPreferredTuner;
     private Long mPreferredFrequency;
+    private boolean mFrequencyHoldEnabled;
+    private Long mFrequencyHold;
     private int mFrequencyRotationDelay = ChannelRotationMonitor.CHANNEL_ROTATION_DELAY_MINIMUM;
 
     public SourceConfigTunerMultipleFrequency()
@@ -64,6 +67,46 @@ public class SourceConfigTunerMultipleFrequency extends SourceConfiguration
     }
 
     /**
+     * Optional labels for each configured frequency. These labels use the same index ordering as the frequency list.
+     */
+    @JacksonXmlProperty(isAttribute = false, localName = "frequency_label")
+    public List<String> getFrequencyLabels()
+    {
+        return mFrequencyLabels;
+    }
+
+    /**
+     * Sets the optional labels for each configured frequency.
+     */
+    public void setFrequencyLabels(List<String> frequencyLabels)
+    {
+        mFrequencyLabels = frequencyLabels != null ? frequencyLabels : new ArrayList<>();
+    }
+
+    /**
+     * Gets the optional label for the specified frequency.
+     * @param frequency to lookup
+     * @return label or null
+     */
+    @JsonIgnore
+    public String getFrequencyLabel(long frequency)
+    {
+        int index = mFrequencies.indexOf(frequency);
+
+        if(index >= 0 && index < mFrequencyLabels.size())
+        {
+            String label = mFrequencyLabels.get(index);
+
+            if(label != null && !label.isBlank())
+            {
+                return label;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Indicates if this configuration has more than one frequency specified
      */
     @JsonIgnore
@@ -78,7 +121,11 @@ public class SourceConfigTunerMultipleFrequency extends SourceConfiguration
     @JsonIgnore
     public long getPreferredFrequency()
     {
-        if(mPreferredFrequency != null)
+        if(mFrequencyHoldEnabled && mFrequencyHold != null && mFrequencies.contains(mFrequencyHold))
+        {
+            return mFrequencyHold;
+        }
+        else if(mPreferredFrequency != null)
         {
             return mPreferredFrequency;
         }
@@ -101,6 +148,41 @@ public class SourceConfigTunerMultipleFrequency extends SourceConfiguration
         {
             mPreferredFrequency = frequency;
         }
+    }
+
+    /**
+     * Indicates if the source should hold on the configured hold frequency instead of rotating through the frequency
+     * list while seeking an active channel.
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "frequency_hold_enabled")
+    public boolean isFrequencyHoldEnabled()
+    {
+        return mFrequencyHoldEnabled;
+    }
+
+    /**
+     * Sets if this source should hold on the configured hold frequency.
+     */
+    public void setFrequencyHoldEnabled(boolean frequencyHoldEnabled)
+    {
+        mFrequencyHoldEnabled = frequencyHoldEnabled;
+    }
+
+    /**
+     * Frequency to hold when frequency hold is enabled.
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "frequency_hold")
+    public Long getFrequencyHold()
+    {
+        return mFrequencyHold;
+    }
+
+    /**
+     * Sets the frequency to hold.
+     */
+    public void setFrequencyHold(Long frequencyHold)
+    {
+        mFrequencyHold = frequencyHold;
     }
 
     /**

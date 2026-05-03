@@ -30,6 +30,7 @@ import io.github.dsheirer.module.decode.config.AuxDecodeConfiguration;
 import io.github.dsheirer.module.decode.config.DecodeConfiguration;
 import io.github.dsheirer.module.decode.dmr.DecodeConfigDMR;
 import io.github.dsheirer.module.decode.dmr.channel.TimeslotFrequency;
+import io.github.dsheirer.module.ProcessingChain;
 import io.github.dsheirer.module.log.EventLogType;
 import io.github.dsheirer.module.log.config.EventLogConfiguration;
 import io.github.dsheirer.playlist.PlaylistManager;
@@ -37,6 +38,7 @@ import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.record.RecorderType;
 import io.github.dsheirer.record.config.RecordConfiguration;
 import io.github.dsheirer.source.config.SourceConfiguration;
+import io.github.dsheirer.source.tuner.channel.rotation.FrequencyHoldChangeRequest;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import java.util.ArrayList;
 import java.util.List;
@@ -245,10 +247,12 @@ public class DMRConfigurationEditor extends ChannelConfigurationEditor
     {
         if(mSourceConfigurationEditor == null)
         {
-            mSourceConfigurationEditor = new FrequencyEditor(mTunerManager,
+            FrequencyEditor frequencyEditor = new FrequencyEditor(mTunerManager,
                 DecodeConfigDMR.CHANNEL_ROTATION_DELAY_MINIMUM_MS,
                 DecodeConfigDMR.CHANNEL_ROTATION_DELAY_MAXIMUM_MS,
                 DecodeConfigDMR.CHANNEL_ROTATION_DELAY_DEFAULT_MS);
+            frequencyEditor.setFrequencyHoldSelectionListener(this::frequencyHoldSelectionChanged);
+            mSourceConfigurationEditor = frequencyEditor;
 
             //Add a listener so that we can push change notifications up to this editor
             mSourceConfigurationEditor.modifiedProperty()
@@ -256,6 +260,26 @@ public class DMRConfigurationEditor extends ChannelConfigurationEditor
         }
 
         return mSourceConfigurationEditor;
+    }
+
+    /**
+     * Applies frequency hold changes immediately to any running channel and persists the setting to the playlist.
+     */
+    private void frequencyHoldSelectionChanged(boolean hold, long frequency)
+    {
+        if(getItem() != null)
+        {
+            saveSourceConfiguration();
+            getPlaylistManager().schedulePlaylistSave();
+
+            ProcessingChain processingChain = getPlaylistManager().getChannelProcessingManager().getProcessingChain(getItem());
+
+            if(processingChain != null)
+            {
+                processingChain.getEventBus().post(hold ? FrequencyHoldChangeRequest.hold(frequency) :
+                    FrequencyHoldChangeRequest.release());
+            }
+        }
     }
 
     private EventLogConfigurationEditor getEventLogConfigurationEditor()

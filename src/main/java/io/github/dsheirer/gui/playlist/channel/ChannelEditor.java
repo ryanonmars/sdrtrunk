@@ -26,6 +26,7 @@ import io.github.dsheirer.module.decode.DecoderFactory;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.playlist.PlaylistManager;
 import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.source.config.SourceConfigTunerMultipleFrequency;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -696,9 +697,25 @@ public class ChannelEditor extends SplitPane implements IFilterProcessor, IAlias
             if(frequencies != null)
             {
                 List<String> freqsMHz = new ArrayList<>();
+                SourceConfigTunerMultipleFrequency multiFrequencyConfig =
+                    param.getValue().getSourceConfiguration() instanceof SourceConfigTunerMultipleFrequency config ?
+                        config : null;
+
                 for(Long frequency: frequencies)
                 {
-                    freqsMHz.add(String.valueOf(frequency / 1E6));
+                    String frequencyText = String.valueOf(frequency / 1E6);
+
+                    if(multiFrequencyConfig != null)
+                    {
+                        String label = multiFrequencyConfig.getFrequencyLabel(frequency);
+
+                        if(label != null)
+                        {
+                            frequencyText = label + " " + frequencyText;
+                        }
+                    }
+
+                    freqsMHz.add(frequencyText);
                 }
 
                 mFrequency.set(Joiner.on(", ").join(freqsMHz));
