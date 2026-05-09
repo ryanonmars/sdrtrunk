@@ -31,12 +31,16 @@ import io.github.dsheirer.gui.playlist.streaming.StreamingEditor;
 import io.github.dsheirer.gui.preference.PreferenceEditorType;
 import io.github.dsheirer.gui.preference.ViewUserPreferenceEditorRequest;
 import io.github.dsheirer.playlist.PlaylistManager;
+import io.github.dsheirer.playlist.csv.PlaylistCsvResult;
+import io.github.dsheirer.playlist.csv.PlaylistCsvService;
 import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import io.github.dsheirer.util.ThreadPool;
 import io.github.dsheirer.util.TimeStamp;
 import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
@@ -55,8 +59,13 @@ import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import javafx.stage.FileChooser;
 
 /**
  * JavaFX playlist, channels, aliases, streaming and radioreference.com import editor
@@ -77,6 +86,11 @@ public class PlaylistEditor extends BorderPane
     private Tab mStreamingTab;
     private AliasEditor mAliasEditor;
     private ChannelEditor mChannelEditor;
+    private PlaylistCsvService mPlaylistCsvService = new PlaylistCsvService();
+    private static final FileChooser.ExtensionFilter CSV_FILE_FILTER =
+        new FileChooser.ExtensionFilter("CSV Files (*.csv)", "*.csv");
+    private static final FileChooser.ExtensionFilter ALL_FILES_FILE_FILTER =
+        new FileChooser.ExtensionFilter("All Files (*.*)", "*.*");
 
     /**
      * Constructs an instance
@@ -145,6 +159,15 @@ public class PlaylistEditor extends BorderPane
             closeItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.ALT_ANY));
             closeItem.setOnAction(event -> getMenuBar().getParent().getScene().getWindow().hide());
             fileMenu.getItems().add(closeItem);
+
+            MenuItem exportPlaylistDataItem = new MenuItem("_Export Playlist Data...");
+            exportPlaylistDataItem.setOnAction(event -> exportPlaylistData());
+            fileMenu.getItems().add(exportPlaylistDataItem);
+
+            MenuItem importPlaylistDataItem = new MenuItem("_Import Playlist Data...");
+            importPlaylistDataItem.setOnAction(event -> importPlaylistData());
+            fileMenu.getItems().add(importPlaylistDataItem);
+
             mMenuBar.getMenus().add(fileMenu);
 
             Menu viewMenu = new Menu("_View");
@@ -193,6 +216,125 @@ public class PlaylistEditor extends BorderPane
         }
 
         return mMenuBar;
+    }
+
+    private void exportPlaylistData()
+    {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Playlist Data");
+        fileChooser.setInitialDirectory(mUserPreferences.getDirectoryPreference().getDirectoryPlaylist().toFile());
+        fileChooser.setInitialFileName("playlist-data.csv");
+        fileChooser.getExtensionFilters().addAll(CSV_FILE_FILTER, ALL_FILES_FILE_FILTER);
+
+        File exportFile = fileChooser.showSaveDialog(getMenuBar().getScene().getWindow());
+
+        if(exportFile != null)
+        {
+            if(!exportFile.toString().toLowerCase().endsWith(".csv"))
+            {
+                exportFile = new File(exportFile.toString() + ".csv");
+            }
+
+            try(Writer writer = Files.newBufferedWriter(exportFile.toPath()))
+            {
+                PlaylistCsvResult result = mPlaylistCsvService.export(writer, mPlaylistManager.getChannelModel(),
+                    mPlaylistManager.getAliasModel());
+                showInformation("Playlist Data Exported", "Export Complete",
+                    "Exported " + result.getChannelRows() + " channel row(s) and " +
+                        result.getAliasIdentifierRows() + " alias identifier row(s).");
+            }
+            catch(Exception e)
+            {
+                mLog.error("Error exporting playlist data to CSV [" + exportFile + "]", e);
+                showError("Playlist Data Export Error", "Unable to export playlist data", e.getMessage());
+            }
+        }
+    }
+
+    private void importPlaylistData()
+    {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Playlist Data");
+        fileChooser.setInitialDirectory(mUserPreferences.getDirectoryPreference().getDirectoryPlaylist().toFile());
+        fileChooser.getExtensionFilters().addAll(CSV_FILE_FILTER, ALL_FILES_FILE_FILTER);
+
+        File importFile = fileChooser.showOpenDialog(getMenuBar().getScene().getWindow());
+
+        if(importFile != null)
+        {
+            try(Reader reader = Files.newBufferedReader(importFile.toPath()))
+            {
+                PlaylistCsvResult result = mPlaylistCsvService.importCsv(reader, mPlaylistManager.getChannelModel(),
+                    mPlaylistManager.getAliasModel());
+
+                if(result.hasChanges())
+                {
+                    mPlaylistManager.schedulePlaylistSave();
+                }
+
+                StringBuilder message = new StringBuilder();
+                message.append("Channels created: ").append(result.getChannelsCreated()).append("\n");
+                message.append("Channels updated: ").append(result.getChannelsUpdated()).append("\n");
+                message.append("Aliases created: ").append(result.getAliasesCreated()).append("\n");
+                message.append("Aliases updated: ").append(result.getAliasesUpdated()).append("\n");
+                message.append("Alias identifiers added: ").append(result.getAliasIdentifiersAdded()).append("\n");
+                message.append("Alias identifiers matched: ").append(result.getAliasIdentifiersMatched());
+
+                if(result.hasErrors())
+                {
+                    message.append("\n\nErrors:\n");
+                    int count = 0;
+
+                    for(String error: result.getErrors())
+                    {
+                        if(count++ >= 20)
+                        {
+                            message.append("... ").append(result.getErrors().size() - 20).append(" more error(s)");
+                            break;
+                        }
+
+                        message.append(error).append("\n");
+                    }
+
+                    showWarning("Playlist Data Imported With Errors", "Import Complete With Errors",
+                        message.toString());
+                }
+                else
+                {
+                    showInformation("Playlist Data Imported", "Import Complete", message.toString());
+                }
+            }
+            catch(Exception e)
+            {
+                mLog.error("Error importing playlist data from CSV [" + importFile + "]", e);
+                showError("Playlist Data Import Error", "Unable to import playlist data", e.getMessage());
+            }
+        }
+    }
+
+    private void showInformation(String title, String header, String content)
+    {
+        showAlert(Alert.AlertType.INFORMATION, title, header, content);
+    }
+
+    private void showWarning(String title, String header, String content)
+    {
+        showAlert(Alert.AlertType.WARNING, title, header, content);
+    }
+
+    private void showError(String title, String header, String content)
+    {
+        showAlert(Alert.AlertType.ERROR, title, header, content);
+    }
+
+    private void showAlert(Alert.AlertType alertType, String title, String header, String content)
+    {
+        Alert alert = new Alert(alertType, content != null ? content : "", ButtonType.OK);
+        alert.setTitle(title);
+        alert.setHeaderText(header);
+        alert.initOwner(getMenuBar().getScene().getWindow());
+        alert.setResizable(true);
+        alert.showAndWait();
     }
 
     private TabPane getTabPane()
